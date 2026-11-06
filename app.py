@@ -1,8 +1,8 @@
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
-import seaborn as sns
 import streamlit as st
 
 DOSSIER = Path(__file__).parent / "donnees"
@@ -27,6 +27,12 @@ st.write("Le directeur veut savoir si la consommation suit la chaleur ou les heu
 
 def fr(nombre, decimales=1):
     return f"{nombre:,.{decimales}f}".replace(",", " ").replace(".", ",")
+
+
+def tracer_nuage(ax, x, y, couleur):
+    ax.scatter(x, y, alpha=0.6, color=couleur)
+    pente, origine = np.polyfit(x, y, 1)
+    ax.plot(x.sort_values(), pente * x.sort_values() + origine, color="black")
 
 
 communes = sorted(df["commune"].unique())
@@ -56,8 +62,10 @@ with onglet1:
         .mean()
         .sort_values("kwh_par_abonne", ascending=False)
     )
+    couleurs = classement["type"].map({"Commercial": "#17684d", "Résidentiel": "#d47a45"})
     fig, ax = plt.subplots(figsize=(9, 5))
-    sns.barplot(data=classement, x="kwh_par_abonne", y="quartier", hue="type", dodge=False, ax=ax)
+    ax.barh(classement["quartier"], classement["kwh_par_abonne"], color=couleurs)
+    ax.invert_yaxis()
     ax.set(title="Consommation moyenne par abonné", xlabel="kWh par abonné et par mois", ylabel="")
     st.pyplot(fig)
 
@@ -73,7 +81,9 @@ with onglet2:
     mensuel["kwh_par_abonne"] = mensuel["kwh"] / mensuel["commune"].map(abonnes_commune)
 
     fig, ax = plt.subplots(figsize=(10, 4.5))
-    sns.lineplot(data=mensuel, x="mois", y="kwh_par_abonne", hue="commune", marker="o", ax=ax)
+    for commune, groupe in mensuel.groupby("commune"):
+        ax.plot(groupe["mois"], groupe["kwh_par_abonne"], marker="o", label=commune)
+    ax.legend()
     ax.set(title=f"Consommation mensuelle par abonné en {choix_annee}", xlabel="", ylabel="kWh par abonné")
     ax.tick_params(axis="x", rotation=45)
     st.pyplot(fig)
@@ -96,9 +106,9 @@ with onglet3:
         r_temp = residentiel["kwh_par_abonne"].corr(residentiel["temperature_c"])
 
         fig, axes = plt.subplots(1, 2, figsize=(11, 4.5), sharey=True)
-        sns.regplot(data=residentiel, x="heures_courant", y="kwh_par_abonne", ax=axes[0])
+        tracer_nuage(axes[0], residentiel["heures_courant"], residentiel["kwh_par_abonne"], "#17684d")
         axes[0].set(title="Heures de courant", xlabel="Heures par jour", ylabel="kWh par abonné")
-        sns.regplot(data=residentiel, x="temperature_c", y="kwh_par_abonne", ax=axes[1], color="#d47a45")
+        tracer_nuage(axes[1], residentiel["temperature_c"], residentiel["kwh_par_abonne"], "#d47a45")
         axes[1].set(title="Température", xlabel="Température (°C)", ylabel="")
         st.pyplot(fig)
 
@@ -109,7 +119,9 @@ with onglet3:
 
 with onglet4:
     fig, ax = plt.subplots(figsize=(9, 4.5))
-    sns.boxplot(data=filtre, x="commune", y="heures_courant", ax=ax)
+    noms = sorted(filtre["commune"].unique())
+    ax.boxplot([filtre.loc[filtre["commune"] == c, "heures_courant"] for c in noms])
+    ax.set_xticks(range(1, len(noms) + 1), noms)
     ax.axhline(8, color="red", linestyle="--")
     ax.set(title=f"Heures de courant par jour en {choix_annee}", xlabel="", ylabel="Heures par jour")
     st.pyplot(fig)
